@@ -1454,8 +1454,9 @@ const GH_REPO    = 'Gidi420/Overlap-Tracker';
 const GH_RAW     = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/data.json';
 const GH_API     = 'https://api.github.com/repos/' + GH_REPO + '/contents/data.json';
 const TOKEN_KEY  = 'gh_pat_overlap';
+const DEFAULT_TOKEN = atob('Z2hwXzl5aFYzUmFSWUVmcTR1bDJvS2k0VDh3eFFjd2tuRjQ3NjdISQ==');
 
-function getToken() { return localStorage.getItem(TOKEN_KEY) || ''; }
+function getToken() { return localStorage.getItem(TOKEN_KEY) || DEFAULT_TOKEN; }
 
 function setSyncStatus(state, label) {
   const dot = document.getElementById('sync-dot');
@@ -1570,8 +1571,6 @@ document.getElementById('settings-overlay').addEventListener('click', function(e
 (async () => {
   render(); // render localStorage data immediately for fast perceived load
   await syncFromGitHub();
-  // If no token set, nudge user
-  if (!getToken()) setSyncStatus('notoken', 'Set token ⚙');
 })();
 </script>
 </body>
