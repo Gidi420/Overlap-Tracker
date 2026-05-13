@@ -1467,17 +1467,28 @@ function setSyncStatus(state, label) {
 
 async function syncFromGitHub() {
   setSyncStatus('syncing', 'Loading…');
+  const token = getToken();
+  const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' };
   try {
-    const resp = await fetch(GH_RAW + '?t=' + Date.now());
+    // Use the API endpoint (not raw URL) — avoids CDN caching entirely
+    const resp = await fetch(GH_API + '?t=' + Date.now(), { headers });
     if (!resp.ok) { setSyncStatus('notoken', 'No cloud data'); return; }
-    const data = await resp.json();
+    const file = await resp.json();
+    const data = JSON.parse(atob(file.content.replace(/\n/g, '')));
     if (data && data.state && data.state.chapters) {
-      state    = data.state;
-      activity = data.activity || [];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity));
-      setSyncStatus('synced', 'Synced');
-      render();
+      // Only overwrite local data if GitHub version is strictly newer
+      const localTs = state && state.updated ? new Date(state.updated).getTime() : 0;
+      const ghTs    = data.state.updated     ? new Date(data.state.updated).getTime() : 0;
+      if (ghTs > localTs) {
+        state    = data.state;
+        activity = data.activity || [];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity));
+        render();
+      }
+      setSyncStatus('synced', 'Synced ✓');
+    } else {
+      setSyncStatus('synced', 'Ready');
     }
   } catch(e) {
     setSyncStatus('error', 'Load failed');
@@ -1485,9 +1496,11 @@ async function syncFromGitHub() {
 }
 
 let _syncTimer = null;
+let _pendingSync = false;
 function scheduleSyncToGitHub() {
+  _pendingSync = true;
   clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(pushToGitHub, 1500);
+  _syncTimer = setTimeout(() => { _pendingSync = false; pushToGitHub(); }, 800);
 }
 
 async function pushToGitHub() {
@@ -1564,12 +1577,19 @@ document.getElementById('settings-overlay').addEventListener('click', function(e
   if (e.target === this) closeSettings();
 });
 
+// Save immediately on page close/refresh if there are unsaved changes
+window.addEventListener('beforeunload', () => {
+  if (_pendingSync) {
+    clearTimeout(_syncTimer);
+    pushToGitHub();
+  }
+});
+
 // ═══════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════
-// Try loading from GitHub first; fall back to localStorage
 (async () => {
-  render(); // render localStorage data immediately for fast perceived load
+  render();
   await syncFromGitHub();
 })();
 </script>
