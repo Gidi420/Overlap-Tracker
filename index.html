@@ -1474,17 +1474,16 @@ function setSyncStatus(state, label) {
 async function syncFromGitHub() {
   setSyncStatus('syncing', 'Loading…');
   const token = getToken();
-  const headers = { 'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json' };
+  // Only add auth header if we have a token — public repo reads work without auth
+  const headers = { 'Accept': 'application/vnd.github+json' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
   try {
-    // Use the API endpoint (not raw URL) — avoids CDN caching entirely
     const resp = await fetch(GH_API + '?t=' + Date.now(), { headers });
     if (!resp.ok) { setSyncStatus('notoken', 'No cloud data'); return; }
     const file = await resp.json();
-    // Decode UTF-8 aware base64 (mirrors the btoa(unescape(encodeURIComponent())) used when saving)
     const raw  = atob(file.content.replace(/\n/g, ''));
     const data = JSON.parse(decodeURIComponent(escape(raw)));
     if (data && data.state && data.state.chapters) {
-      // Only overwrite local data if GitHub version is strictly newer
       const localTs = state && state.updated ? new Date(state.updated).getTime() : 0;
       const ghTs    = data.state.updated     ? new Date(data.state.updated).getTime() : 0;
       if (ghTs > localTs) {
@@ -1502,6 +1501,9 @@ async function syncFromGitHub() {
     setSyncStatus('error', 'Load failed');
   }
 }
+
+// Poll every 10 seconds so all open pages stay in sync automatically
+setInterval(syncFromGitHub, 10000);
 
 let _syncTimer = null;
 let _pendingSync = false;
