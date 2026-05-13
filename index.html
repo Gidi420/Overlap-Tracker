@@ -1455,11 +1455,11 @@ const GH_RAW     = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/data.
 const GH_API     = 'https://api.github.com/repos/' + GH_REPO + '/contents/data.json';
 const TOKEN_KEY  = 'gh_pat_overlap';
 function getToken() {
-  // Token can live in the URL hash (e.g. https://…/index.html#ghp_xxx)
-  // This way it's never in source code or git history, but travels with the shared link
+  // URL hash always wins — ensures a fresh link always overrides a stale cached token
   const hash = window.location.hash.slice(1);
   if (hash && (hash.startsWith('ghp_') || hash.startsWith('github_pat_'))) {
-    localStorage.setItem(TOKEN_KEY, hash); // cache it for this browser
+    localStorage.setItem(TOKEN_KEY, hash);
+    return hash;
   }
   return localStorage.getItem(TOKEN_KEY) || '';
 }
@@ -1535,12 +1535,16 @@ async function pushToGitHub() {
     if (putResp.ok) {
       setSyncStatus('synced', 'Synced ✓');
     } else {
-      const err = await putResp.json();
-      console.warn('GitHub sync error:', err);
-      setSyncStatus('error', 'Save failed');
+      const err = await putResp.json().catch(() => ({}));
+      const msg = putResp.status === 401 ? 'Bad token' :
+                  putResp.status === 422 ? 'SHA conflict' :
+                  'Error ' + putResp.status;
+      setSyncStatus('error', msg);
+      console.error('GitHub sync error:', putResp.status, err);
     }
   } catch(e) {
     setSyncStatus('error', 'Offline?');
+    console.error('GitHub sync exception:', e);
   }
 }
 
