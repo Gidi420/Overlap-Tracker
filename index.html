@@ -600,88 +600,16 @@ function today() { return new Date().toISOString().slice(0,10); }
 function nowISO() { return new Date().toISOString(); }
 
 function defaultData() {
-  const mkTask = (title, assignee, status, priority, due, notes='') => ({
-    id: uid(), title, assignee, status, priority, due,
-    notes, created: today(), expanded: false
-  });
-  const mkSub = (name, tasks) => ({ id: uid(), name, tasks });
-  const mkChap = (name, subs) => ({ id: uid(), name, subs, open: true });
-
+  const mkChap = (name) => ({ id: uid(), name, subs: [], open: true });
   return {
     title: 'Overlap Plan Improvement Tracker',
     updated: nowISO(),
     chapters: [
-      mkChap('Chapter 1 – Introduction & Scope', [
-        mkSub('1.1 Background', [
-          mkTask('Review existing introduction text', 'Amir Cohen', 'Done', 'Medium', '2026-04-10', 'Completed initial pass'),
-          mkTask('Add context for scope boundaries', 'Yael Levi', 'Done', 'High', '2026-04-15'),
-          mkTask('Align terminology with glossary', 'Amir Cohen', 'In Progress', 'Low', '2026-05-20'),
-        ]),
-        mkSub('1.2 Objectives', [
-          mkTask('Define primary objectives clearly', 'Yael Levi', 'Done', 'High', '2026-04-12'),
-          mkTask('Add measurable KPIs per objective', 'Dana Mizrahi', 'In Progress', 'Urgent', '2026-05-15', 'Blocked on stakeholder input'),
-        ]),
-        mkSub('1.3 Document Structure', [
-          mkTask('Outline chapter summaries', 'Amir Cohen', 'Done', 'Low', '2026-04-08'),
-          mkTask('Add navigation aids', 'Dana Mizrahi', 'Not Started', 'Low', '2026-06-01'),
-        ]),
-      ]),
-      mkChap('Chapter 2 – Methodology', [
-        mkSub('2.1 Research Approach', [
-          mkTask('Describe qualitative methods', 'Yael Levi', 'Done', 'High', '2026-04-18'),
-          mkTask('Describe quantitative methods', 'Yael Levi', 'Review', 'High', '2026-04-25'),
-          mkTask('Justify method selection', 'Amir Cohen', 'In Progress', 'Medium', '2026-05-10'),
-        ]),
-        mkSub('2.2 Data Collection', [
-          mkTask('Define data sources', 'Dana Mizrahi', 'Done', 'High', '2026-04-20'),
-          mkTask('Create data collection instruments', 'Dana Mizrahi', 'Review', 'Medium', '2026-05-05'),
-          mkTask('Pilot test instruments', 'Yael Levi', 'Not Started', 'Medium', '2026-05-30'),
-        ]),
-      ]),
-      mkChap('Chapter 3 – Analysis & Findings', [
-        mkSub('3.1 Quantitative Analysis', [
-          mkTask('Run statistical models', 'Amir Cohen', 'In Progress', 'Urgent', '2026-05-18', 'Using R for regression'),
-          mkTask('Visualize key results', 'Dana Mizrahi', 'Not Started', 'High', '2026-05-25'),
-        ]),
-        mkSub('3.2 Qualitative Analysis', [
-          mkTask('Code interview transcripts', 'Yael Levi', 'In Progress', 'High', '2026-05-12'),
-          mkTask('Identify emerging themes', 'Yael Levi', 'Not Started', 'High', '2026-05-22'),
-          mkTask('Triangulate with quantitative data', 'Amir Cohen', 'Not Started', 'Medium', '2026-06-05'),
-        ]),
-        mkSub('3.3 Summary of Findings', [
-          mkTask('Write executive summary', 'Dana Mizrahi', 'Not Started', 'Urgent', '2026-06-10'),
-          mkTask('Cross-reference hypotheses', 'Amir Cohen', 'Not Started', 'High', '2026-06-08'),
-        ]),
-      ]),
-      mkChap('Chapter 4 – Discussion', [
-        mkSub('4.1 Interpretation', [
-          mkTask('Interpret main findings', 'Yael Levi', 'Not Started', 'High', '2026-06-15'),
-          mkTask('Compare with prior literature', 'Dana Mizrahi', 'Not Started', 'Medium', '2026-06-18'),
-        ]),
-        mkSub('4.2 Limitations', [
-          mkTask('Document study limitations', 'Amir Cohen', 'Not Started', 'Medium', '2026-06-20'),
-          mkTask('Propose mitigation strategies', 'Yael Levi', 'Not Started', 'Low', '2026-06-22'),
-        ]),
-        mkSub('4.3 Implications', [
-          mkTask('Describe practical implications', 'Dana Mizrahi', 'Not Started', 'Medium', '2026-06-25'),
-          mkTask('Describe theoretical contributions', 'Amir Cohen', 'Not Started', 'Low', '2026-06-28'),
-        ]),
-      ]),
-      mkChap('Chapter 5 – Conclusions & Recommendations', [
-        mkSub('5.1 Conclusions', [
-          mkTask('Summarize key conclusions', 'Yael Levi', 'Not Started', 'High', '2026-07-01'),
-          mkTask('Link back to objectives', 'Amir Cohen', 'Not Started', 'Medium', '2026-07-03'),
-        ]),
-        mkSub('5.2 Recommendations', [
-          mkTask('List actionable recommendations', 'Dana Mizrahi', 'Not Started', 'Urgent', '2026-07-05'),
-          mkTask('Prioritize recommendations', 'Yael Levi', 'Not Started', 'High', '2026-07-07'),
-          mkTask('Write future research directions', 'Amir Cohen', 'Not Started', 'Low', '2026-07-10'),
-        ]),
-        mkSub('5.3 Final Review', [
-          mkTask('Proofread full document', 'Dana Mizrahi', 'Not Started', 'Urgent', '2026-07-12'),
-          mkTask('Submit for peer review', 'Yael Levi', 'Not Started', 'Urgent', '2026-07-15'),
-        ]),
-      ]),
+      mkChap('Chapter 1 – Introduction & Scope'),
+      mkChap('Chapter 2 – Methodology'),
+      mkChap('Chapter 3 – Analysis & Findings'),
+      mkChap('Chapter 4 – Discussion'),
+      mkChap('Chapter 5 – Conclusions & Recommendations'),
     ]
   };
 }
