@@ -264,35 +264,70 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: v
 .task-expand-btn { font-size: 11px; color: var(--text-muted); cursor: pointer; padding: 2px 5px; border-radius: 3px; transition: background .15s; }
 .task-expand-btn:hover { background: var(--border); }
 
-/* ── Task Detail (inline expand) ── */
-.task-detail {
+/* ── Task inline fields ── */
+.task-inline-field {
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 11px;
+  color: var(--text-muted);
+  outline: none;
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: background .15s, border-color .15s;
+  min-width: 0;
+}
+.task-inline-field::placeholder { color: #CBD5E1; }
+.task-inline-field:hover { background: var(--border); }
+.task-inline-field:focus { background: var(--surface); border-color: var(--accent); color: var(--text); }
+.task-inline-field.assignee-field { width: 80px; }
+.task-inline-field.date-field { width: 118px; cursor: pointer; }
+.task-inline-field.date-field.overdue { color: #DC2626; font-weight: 600; }
+.task-inline-select {
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 11px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  transition: background .15s;
+  max-width: 96px;
+}
+.task-inline-select:hover { background: var(--border); }
+.task-inline-select:focus { border-color: var(--accent); }
+/* Colour the status select to match badges */
+.task-inline-select.s-not-started { background:#F1F5F9; color:#475569; }
+.task-inline-select.s-in-progress  { background:#EFF6FF; color:#1D4ED8; }
+.task-inline-select.s-review       { background:#FEF3C7; color:#B45309; }
+.task-inline-select.s-done         { background:#DCFCE7; color:#15803D; }
+.task-notes-btn {
+  font-size: 11px; color: var(--text-muted); cursor: pointer;
+  padding: 2px 6px; border-radius: 4px; border: 1px solid transparent;
+  transition: background .15s; white-space: nowrap; flex-shrink: 0;
+}
+.task-notes-btn:hover { background: var(--border); }
+.task-notes-btn.has-notes { color: var(--accent); }
+/* Notes panel */
+.task-notes-panel {
   display: none;
+  padding: 6px 10px 8px 34px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-top: none;
   border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-  padding: 12px 14px;
-  gap: 10px;
-  flex-direction: column;
 }
-.task-detail.open { display: flex; }
-.detail-row { display: flex; gap: 10px; align-items: flex-start; flex-wrap: wrap; }
-.detail-field { display: flex; flex-direction: column; gap: 3px; }
-.detail-label { font-size: 10px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
-.detail-input, .detail-select, .detail-textarea {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
-  font-size: 12px;
-  font-family: inherit;
-  background: var(--surface);
-  color: var(--text);
-  outline: none;
+.task-notes-panel.open { display: block; }
+.task-notes-textarea {
+  width: 100%; min-height: 52px; resize: vertical;
+  border: 1px solid var(--border); border-radius: 4px;
+  padding: 5px 8px; font-size: 12px; font-family: inherit;
+  background: var(--surface); color: var(--text); outline: none;
   transition: border .15s;
 }
-.detail-input:focus, .detail-select:focus, .detail-textarea:focus { border-color: var(--accent); }
-.detail-textarea { resize: vertical; min-height: 56px; width: 100%; }
-.detail-created { font-size: 11px; color: var(--text-muted); }
+.task-notes-textarea:focus { border-color: var(--accent); }
 
 /* ── Status Badge ── */
 .badge {
@@ -949,12 +984,17 @@ function renderSubChapter(container, chapId, sub, forceOpen) {
   initDragDrop(taskList, chapId, sub.id);
 }
 
+function statusSelectClass(s) {
+  return { 'Not Started':'s-not-started','In Progress':'s-in-progress','Review':'s-review','Done':'s-done' }[s] || '';
+}
+
 function renderTask(container, chapId, subId, task) {
   const overdue = isOverdue(task);
-  const dueLabel = task.due ? (overdue ? '⚠ ' : '') + task.due : '';
+  const assignees = [...new Set(allTasks().map(t=>t.assignee).filter(Boolean))];
+  const aSuggestions = assignees.map(a => `<option value="${escHTML(a)}">`).join('');
 
   const wrap = document.createElement('div');
-  wrap.style.cssText = 'display:flex;flex-direction:column';
+  wrap.dataset.taskWrap = task.id;
 
   const row = document.createElement('div');
   row.className = 'task-row';
@@ -962,63 +1002,38 @@ function renderTask(container, chapId, subId, task) {
   row.dataset.priority = task.priority;
   row.draggable = true;
   row.innerHTML = `
+    <datalist id="dl-${task.id}">${aSuggestions}</datalist>
     <span class="task-drag-handle" title="Drag to reorder">⠿</span>
     <span class="task-title editable" ${dirAttr(task.title)} ondblclick="startEdit(event,'task','${task.id}','${chapId}','${subId}')">${escHTML(task.title)}</span>
     <input class="inline-input" id="edit-task-${task.id}" onblur="saveEdit('task','${task.id}','${chapId}','${subId}')" onkeydown="editKeydown(event,'task','${task.id}','${chapId}','${subId}')">
-    ${task.assignee ? `<span class="task-assignee">${escHTML(task.assignee)}</span>` : ''}
-    ${task.due ? `<span class="task-due ${overdue?'overdue':''}">${escHTML(dueLabel)}</span>` : ''}
-    ${badgeHTML(task.status)}
-    <div class="task-actions">
-      <span class="task-expand-btn" onclick="toggleTaskDetail('${task.id}')" title="Details">⋯</span>
-      <button class="btn btn-danger-ghost btn-sm btn-icon" onclick="confirmDelete('task','${task.id}','${chapId}','${subId}')" title="Delete">✕</button>
-    </div>
+    <input class="task-inline-field assignee-field" list="dl-${task.id}" value="${escHTML(task.assignee||'')}" placeholder="Assignee"
+      onchange="updateTask('${chapId}','${subId}','${task.id}','assignee',this.value)">
+    <input class="task-inline-field date-field${overdue?' overdue':''}" type="date" value="${escHTML(task.due||'')}"
+      onchange="updateTask('${chapId}','${subId}','${task.id}','due',this.value)">
+    <select class="task-inline-select ${statusSelectClass(task.status)}"
+      onchange="updateTask('${chapId}','${subId}','${task.id}','status',this.value);this.className='task-inline-select '+statusSelectClass(this.value)">
+      ${['Not Started','In Progress','Review','Done'].map(s=>`<option ${task.status===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    <select class="task-inline-select"
+      onchange="updateTask('${chapId}','${subId}','${task.id}','priority',this.value)">
+      ${['Low','Medium','High','Urgent'].map(p=>`<option ${task.priority===p?'selected':''}>${p}</option>`).join('')}
+    </select>
+    <span class="task-notes-btn${task.notes?' has-notes':''}" onclick="toggleTaskNotes('${task.id}')" title="${task.notes?'View/edit notes':'Add notes'}">
+      ${task.notes ? '💬' : '+ Note'}
+    </span>
+    <button class="btn btn-danger-ghost btn-sm btn-icon" onclick="confirmDelete('task','${task.id}','${chapId}','${subId}')" title="Delete">✕</button>
   `;
   wrap.appendChild(row);
 
-  const detail = document.createElement('div');
-  detail.className = 'task-detail' + (task.expanded ? ' open' : '');
-  detail.id = `detail-${task.id}`;
-  detail.innerHTML = buildDetailHTML(task, chapId, subId);
-  wrap.appendChild(detail);
-
-  container.appendChild(wrap);
-}
-
-function buildDetailHTML(task, chapId, subId) {
-  const assignees = [...new Set(allTasks().map(t=>t.assignee).filter(Boolean))];
-  const aSuggestions = assignees.map(a => `<option value="${escHTML(a)}">`).join('');
-  return `
-    <datalist id="dl-${task.id}">${aSuggestions}</datalist>
-    <div class="detail-row">
-      <div class="detail-field">
-        <span class="detail-label">Status</span>
-        <select class="detail-select" onchange="updateTask('${chapId}','${subId}','${task.id}','status',this.value)">
-          ${['Not Started','In Progress','Review','Done'].map(s=>`<option ${task.status===s?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </div>
-      <div class="detail-field">
-        <span class="detail-label">Priority</span>
-        <select class="detail-select" onchange="updateTask('${chapId}','${subId}','${task.id}','priority',this.value)">
-          ${['Low','Medium','High','Urgent'].map(p=>`<option ${task.priority===p?'selected':''}>${p}</option>`).join('')}
-        </select>
-      </div>
-      <div class="detail-field">
-        <span class="detail-label">Assignee</span>
-        <input class="detail-input" list="dl-${task.id}" value="${escHTML(task.assignee||'')}" placeholder="Name…"
-          onchange="updateTask('${chapId}','${subId}','${task.id}','assignee',this.value)">
-      </div>
-      <div class="detail-field">
-        <span class="detail-label">Due Date</span>
-        <input class="detail-input" type="date" value="${escHTML(task.due||'')}"
-          onchange="updateTask('${chapId}','${subId}','${task.id}','due',this.value)">
-      </div>
-    </div>
-    <div class="detail-field" style="width:100%">
-      <span class="detail-label">Notes / Comments</span>
-      <textarea class="detail-textarea" placeholder="Add notes…" onchange="updateTask('${chapId}','${subId}','${task.id}','notes',this.value)">${escHTML(task.notes||'')}</textarea>
-    </div>
-    <span class="detail-created">Created: ${task.created}</span>
+  const notesPanel = document.createElement('div');
+  notesPanel.className = 'task-notes-panel' + (task.expanded ? ' open' : '');
+  notesPanel.id = `notes-${task.id}`;
+  notesPanel.innerHTML = `
+    <textarea class="task-notes-textarea" placeholder="Add notes…"
+      onchange="updateTask('${chapId}','${subId}','${task.id}','notes',this.value)">${escHTML(task.notes||'')}</textarea>
   `;
+  wrap.appendChild(notesPanel);
+  container.appendChild(wrap);
 }
 
 function renderActivity() {
@@ -1073,11 +1088,10 @@ function toggleSub(chapId, subId) {
   }
 }
 
-function toggleTaskDetail(taskId) {
-  const detail = document.getElementById(`detail-${taskId}`);
-  if (!detail) return;
-  const isOpen = detail.classList.toggle('open');
-  // update state
+function toggleTaskNotes(taskId) {
+  const panel = document.getElementById(`notes-${taskId}`);
+  if (!panel) return;
+  const isOpen = panel.classList.toggle('open');
   for (const chap of state.chapters)
     for (const sub of chap.subs)
       for (const task of sub.tasks)
