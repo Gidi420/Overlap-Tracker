@@ -1491,9 +1491,8 @@ let _lastETag = null;
 
 async function syncFromGitHub(force) {
   const token = getToken();
-  const headers = { 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' };
+  const headers = { 'Accept': 'application/vnd.github+json' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
-  // Send stored ETag so GitHub returns 304 (not modified) when nothing changed — bypasses their cache
   if (_lastETag && !force) headers['If-None-Match'] = _lastETag;
   try {
     const resp = await fetch(GH_API, { headers, cache: 'no-store' });
