@@ -1471,15 +1471,19 @@ function setSyncStatus(state, label) {
   lbl.textContent = label;
 }
 
-async function syncFromGitHub() {
-  setSyncStatus('syncing', 'Loading…');
+let _lastETag = null;
+
+async function syncFromGitHub(force) {
   const token = getToken();
-  // Only add auth header if we have a token — public repo reads work without auth
-  const headers = { 'Accept': 'application/vnd.github+json' };
+  const headers = { 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' };
   if (token) headers['Authorization'] = 'Bearer ' + token;
+  // Send stored ETag so GitHub returns 304 (not modified) when nothing changed — bypasses their cache
+  if (_lastETag && !force) headers['If-None-Match'] = _lastETag;
   try {
-    const resp = await fetch(GH_API + '?t=' + Date.now(), { headers });
-    if (!resp.ok) { setSyncStatus('notoken', 'No cloud data'); return; }
+    const resp = await fetch(GH_API, { headers, cache: 'no-store' });
+    if (resp.status === 304) { setSyncStatus('synced', 'Synced ✓'); return; } // no change
+    if (!resp.ok) { setSyncStatus('error', 'Fetch failed ' + resp.status); return; }
+    _lastETag = resp.headers.get('ETag') || null;
     const file = await resp.json();
     const raw  = atob(file.content.replace(/\n/g, ''));
     const data = JSON.parse(decodeURIComponent(escape(raw)));
@@ -1494,16 +1498,17 @@ async function syncFromGitHub() {
         render();
       }
       setSyncStatus('synced', 'Synced ✓');
-    } else {
-      setSyncStatus('synced', 'Ready');
     }
   } catch(e) {
-    setSyncStatus('error', 'Load failed');
+    setSyncStatus('error', 'Offline?');
   }
 }
 
-// Poll every 10 seconds so all open pages stay in sync automatically
-setInterval(syncFromGitHub, 10000);
+// After a successful push, force-sync immediately to confirm the write and update ETag
+async function syncAfterPush() { _lastETag = null; await syncFromGitHub(true); }
+
+// Poll every 7 seconds — ETag means this is cheap (304 responses use minimal bandwidth)
+setInterval(syncFromGitHub, 7000);
 
 let _syncTimer = null;
 let _pendingSync = false;
@@ -1535,7 +1540,7 @@ async function pushToGitHub() {
 
     const putResp = await fetch(GH_API, { method: 'PUT', headers, body: JSON.stringify(body) });
     if (putResp.ok) {
-      setSyncStatus('synced', 'Synced ✓');
+      await syncAfterPush();
     } else {
       const err = await putResp.json().catch(() => ({}));
       const msg = putResp.status === 401 ? 'Bad token' :
