@@ -310,6 +310,8 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: v
 }
 .task-notes-btn:hover { background: var(--border); }
 .task-notes-btn.has-notes { color: var(--accent); }
+.task-notes-btn.no-notes { opacity: 0; }
+.task-row:hover .task-notes-btn.no-notes { opacity: 1; }
 /* Notes panel */
 .task-notes-panel {
   display: none;
@@ -1018,7 +1020,7 @@ function renderTask(container, chapId, subId, task) {
       onchange="updateTask('${chapId}','${subId}','${task.id}','priority',this.value)">
       ${['Low','Medium','High','Urgent'].map(p=>`<option ${task.priority===p?'selected':''}>${p}</option>`).join('')}
     </select>
-    <span class="task-notes-btn${task.notes?' has-notes':''}" onclick="toggleTaskNotes('${task.id}')" title="${task.notes?'View/edit notes':'Add notes'}">
+    <span class="task-notes-btn${task.notes?' has-notes':' no-notes'}" onclick="toggleTaskNotes('${task.id}')" title="${task.notes?'View/edit notes':'Add notes'}">
       ${task.notes ? '💬' : '+ Note'}
     </span>
     <button class="btn btn-danger-ghost btn-sm btn-icon" onclick="confirmDelete('task','${task.id}','${chapId}','${subId}')" title="Delete">✕</button>
