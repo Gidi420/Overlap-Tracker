@@ -649,7 +649,7 @@ function defaultData() {
   const mkChap = (name) => ({ id: uid(), name, subs: [], open: true });
   return {
     title: 'Overlap Plan Improvement Tracker',
-    updated: nowISO(),
+    updated: '2000-01-01T00:00:00.000Z',
     chapters: [
       mkChap('Chapter 1 – Introduction & Scope'),
       mkChap('Chapter 2 – Methodology'),
@@ -1489,6 +1489,7 @@ function setSyncStatus(state, label) {
 
 let _lastETag = null;
 
+let _lastETag = null;
 async function syncFromGitHub(force) {
   const token = getToken();
   const headers = { 'Accept': 'application/vnd.github+json' };
