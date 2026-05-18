@@ -1488,8 +1488,6 @@ function setSyncStatus(state, label) {
 }
 
 let _lastETag = null;
-
-let _lastETag = null;
 async function syncFromGitHub(force) {
   const token = getToken();
   const headers = { 'Accept': 'application/vnd.github+json' };
