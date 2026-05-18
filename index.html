@@ -1466,12 +1466,13 @@ mainEl.addEventListener('scroll', () => {
 // ═══════════════════════════════════════════════════
 //  GITHUB SYNC
 // ═══════════════════════════════════════════════════
-const GH_REPO    = 'Gidi420/Overlap-Tracker';
-const GH_RAW     = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/data.json';
-const GH_API     = 'https://api.github.com/repos/' + GH_REPO + '/contents/data.json';
-const TOKEN_KEY  = 'gh_pat_overlap';
+const GH_REPO   = 'Gidi420/Overlap-Tracker';
+const GH_RAW    = 'https://raw.githubusercontent.com/' + GH_REPO + '/main/data.json';
+const GH_API    = 'https://api.github.com/repos/' + GH_REPO + '/contents/data.json';
+const TOKEN_KEY = 'gh_pat_overlap';
+
 function getToken() {
-  // URL hash always wins — ensures a fresh link always overrides a stale cached token
+  // URL hash always wins — ensures a fresh link overrides any stale cached token
   const hash = window.location.hash.slice(1);
   if (hash && (hash.startsWith('ghp_') || hash.startsWith('github_pat_'))) {
     localStorage.setItem(TOKEN_KEY, hash);
@@ -1480,27 +1481,18 @@ function getToken() {
   return localStorage.getItem(TOKEN_KEY) || '';
 }
 
-function setSyncStatus(state, label) {
-  const dot = document.getElementById('sync-dot');
-  const lbl = document.getElementById('sync-label');
-  dot.className = state;
-  lbl.textContent = label;
+function setSyncStatus(st, label) {
+  document.getElementById('sync-dot').className = st;
+  document.getElementById('sync-label').textContent = label;
 }
 
-let _lastETag = null;
-async function syncFromGitHub(force) {
-  const token = getToken();
-  const headers = { 'Accept': 'application/vnd.github+json' };
-  if (token) headers['Authorization'] = 'Bearer ' + token;
-  if (_lastETag && !force) headers['If-None-Match'] = _lastETag;
+// ── READ: use raw URL + cache-bust timestamp (no token needed, public repo) ──
+async function syncFromGitHub() {
   try {
-    const resp = await fetch(GH_API, { headers, cache: 'no-store' });
-    if (resp.status === 304) { setSyncStatus('synced', 'Synced ✓'); return; } // no change
-    if (!resp.ok) { setSyncStatus('error', 'Fetch failed ' + resp.status); return; }
-    _lastETag = resp.headers.get('ETag') || null;
-    const file = await resp.json();
-    const raw  = atob(file.content.replace(/\n/g, ''));
-    const data = JSON.parse(decodeURIComponent(escape(raw)));
+    const url  = GH_RAW + '?v=' + Date.now();
+    const resp = await fetch(url, { cache: 'no-store' });
+    if (!resp.ok) { setSyncStatus('error', 'Fetch failed ' + resp.status); return false; }
+    const data = await resp.json();
     if (data && data.state && data.state.chapters) {
       const localTs = state && state.updated ? new Date(state.updated).getTime() : 0;
       const ghTs    = data.state.updated     ? new Date(data.state.updated).getTime() : 0;
@@ -1511,30 +1503,20 @@ async function syncFromGitHub(force) {
         localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity));
         render();
       }
-      setSyncStatus('synced', 'Synced ✓');
+      const tok = getToken();
+      setSyncStatus(tok ? 'synced' : 'notoken', tok ? 'Synced ✓' : 'Read-only');
+      return true;
     }
+    setSyncStatus('error', 'Bad data');
+    return false;
   } catch(e) {
     setSyncStatus('error', 'Offline?');
+    console.error('Sync read error:', e);
+    return false;
   }
 }
 
-// After a successful push, force-sync immediately to confirm the write and update ETag
-async function syncAfterPush() { _lastETag = null; await syncFromGitHub(true); }
-
-// Poll every 7 seconds — ETag means this is cheap (304 responses use minimal bandwidth)
-setInterval(syncFromGitHub, 7000);
-
-let _syncTimer = null;
-let _pendingSync = false;
-let _initialSyncDone = false; // guard: never push until we've loaded from GitHub first
-
-function scheduleSyncToGitHub() {
-  if (!_initialSyncDone) return; // changes go to localStorage only until first sync completes
-  _pendingSync = true;
-  clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(() => { _pendingSync = false; pushToGitHub(); }, 800);
-}
-
+// ── WRITE: use Contents API (needs token + SHA) ──
 async function pushToGitHub() {
   const token = getToken();
   if (!token) { setSyncStatus('notoken', 'No token'); return; }
@@ -1545,10 +1527,9 @@ async function pushToGitHub() {
     'Content-Type': 'application/json'
   };
   try {
-    // Get current SHA (needed for update)
     let sha = null;
     const getResp = await fetch(GH_API, { headers });
-    if (getResp.ok) { const d = await getResp.json(); sha = d.sha; }
+    if (getResp.ok) { sha = (await getResp.json()).sha; }
 
     const payload = JSON.stringify({ state, activity });
     const encoded = btoa(unescape(encodeURIComponent(payload)));
@@ -1557,19 +1538,35 @@ async function pushToGitHub() {
 
     const putResp = await fetch(GH_API, { method: 'PUT', headers, body: JSON.stringify(body) });
     if (putResp.ok) {
-      await syncAfterPush();
+      // Wait for CDN to propagate the new file before reading back
+      await new Promise(r => setTimeout(r, 1800));
+      await syncFromGitHub();
     } else {
       const err = await putResp.json().catch(() => ({}));
-      const msg = putResp.status === 401 ? 'Bad token' :
-                  putResp.status === 422 ? 'SHA conflict' :
-                  'Error ' + putResp.status;
-      setSyncStatus('error', msg);
-      console.error('GitHub sync error:', putResp.status, err);
+      setSyncStatus('error',
+        putResp.status === 401 ? 'Bad token' :
+        putResp.status === 422 ? 'SHA conflict' :
+        'Error ' + putResp.status);
+      console.error('GitHub push error:', putResp.status, err);
     }
   } catch(e) {
     setSyncStatus('error', 'Offline?');
-    console.error('GitHub sync exception:', e);
+    console.error('GitHub push exception:', e);
   }
+}
+
+// Poll every 8 seconds (raw URL, no auth rate-limit concern)
+setInterval(syncFromGitHub, 8000);
+
+let _syncTimer = null;
+let _pendingSync = false;
+let _initialSyncDone = false; // guard: never push until we've loaded from GitHub first
+
+function scheduleSyncToGitHub() {
+  if (!_initialSyncDone) return;
+  _pendingSync = true;
+  clearTimeout(_syncTimer);
+  _syncTimer = setTimeout(() => { _pendingSync = false; pushToGitHub(); }, 800);
 }
 
 // Patch saveState to also push to GitHub
@@ -1582,8 +1579,7 @@ function saveState() {
 
 // ── Settings modal ──
 function openSettings() {
-  const input = document.getElementById('settings-token-input');
-  input.value = getToken();
+  document.getElementById('settings-token-input').value = getToken();
   document.getElementById('settings-msg').style.display = 'none';
   document.getElementById('settings-overlay').style.display = 'flex';
 }
@@ -1605,29 +1601,29 @@ function clearToken() {
 }
 function showSettingsMsg(msg, color) {
   const el = document.getElementById('settings-msg');
-  el.textContent = msg;
-  el.style.color = color;
-  el.style.display = 'block';
+  el.textContent = msg; el.style.color = color; el.style.display = 'block';
 }
 document.getElementById('settings-overlay').addEventListener('click', function(e) {
   if (e.target === this) closeSettings();
 });
 
-// Save immediately on page close/refresh if there are unsaved changes
 window.addEventListener('beforeunload', () => {
-  if (_pendingSync) {
-    clearTimeout(_syncTimer);
-    pushToGitHub();
-  }
+  if (_pendingSync) { clearTimeout(_syncTimer); pushToGitHub(); }
 });
 
 // ═══════════════════════════════════════════════════
-//  BOOT
+//  BOOT — render local data immediately, then load from GitHub with retries
 // ═══════════════════════════════════════════════════
 (async () => {
   render();
-  await syncFromGitHub();
-  _initialSyncDone = true; // from here on, saves are allowed to push to GitHub
+  setSyncStatus('syncing', 'Loading…');
+  let ok = false;
+  for (let attempt = 0; attempt < 4 && !ok; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, 2500));
+    ok = await syncFromGitHub();
+  }
+  if (!ok) setSyncStatus('error', 'Sync failed — check connection');
+  _initialSyncDone = true;
 })();
 </script>
 </body>
