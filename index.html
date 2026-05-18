@@ -1526,7 +1526,10 @@ setInterval(syncFromGitHub, 7000);
 
 let _syncTimer = null;
 let _pendingSync = false;
+let _initialSyncDone = false; // guard: never push until we've loaded from GitHub first
+
 function scheduleSyncToGitHub() {
+  if (!_initialSyncDone) return; // changes go to localStorage only until first sync completes
   _pendingSync = true;
   clearTimeout(_syncTimer);
   _syncTimer = setTimeout(() => { _pendingSync = false; pushToGitHub(); }, 800);
@@ -1624,6 +1627,7 @@ window.addEventListener('beforeunload', () => {
 (async () => {
   render();
   await syncFromGitHub();
+  _initialSyncDone = true; // from here on, saves are allowed to push to GitHub
 })();
 </script>
 </body>
