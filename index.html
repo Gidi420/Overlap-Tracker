@@ -1486,6 +1486,9 @@ function setSyncStatus(st, label) {
   document.getElementById('sync-label').textContent = label;
 }
 
+// Track the last timestamp GitHub had, so boot can detect if local is ahead
+let _lastGHTimestamp = null;
+
 // ── READ: use raw URL + cache-bust timestamp (no token needed, public repo) ──
 async function syncFromGitHub() {
   try {
@@ -1494,8 +1497,9 @@ async function syncFromGitHub() {
     if (!resp.ok) { setSyncStatus('error', 'Fetch failed ' + resp.status); return false; }
     const data = await resp.json();
     if (data && data.state && data.state.chapters) {
+      _lastGHTimestamp = data.state.updated || null;
       const localTs = state && state.updated ? new Date(state.updated).getTime() : 0;
-      const ghTs    = data.state.updated     ? new Date(data.state.updated).getTime() : 0;
+      const ghTs    = _lastGHTimestamp       ? new Date(_lastGHTimestamp).getTime() : 0;
       if (ghTs > localTs) {
         state    = data.state;
         activity = data.activity || [];
@@ -1617,13 +1621,27 @@ window.addEventListener('beforeunload', () => {
 (async () => {
   render();
   setSyncStatus('syncing', 'Loading…');
+
+  // Capture local timestamp BEFORE sync, so we can tell if local is ahead of GitHub
+  const localTsBeforeSync = state && state.updated ? new Date(state.updated).getTime() : 0;
+
   let ok = false;
   for (let attempt = 0; attempt < 4 && !ok; attempt++) {
     if (attempt > 0) await new Promise(r => setTimeout(r, 2500));
     ok = await syncFromGitHub();
   }
   if (!ok) setSyncStatus('error', 'Sync failed — check connection');
+
   _initialSyncDone = true;
+
+  // If this browser has REAL local data (not just the default empty state) that
+  // GitHub doesn't have yet, push it up immediately so other devices can see it
+  const ghTs = _lastGHTimestamp ? new Date(_lastGHTimestamp).getTime() : 0;
+  const defaultTs = new Date('2000-01-02').getTime(); // 1 day after defaultData sentinel
+  if (ok && localTsBeforeSync > defaultTs && localTsBeforeSync > ghTs && getToken()) {
+    console.log('Local data is newer than GitHub — pushing to sync…');
+    setTimeout(pushToGitHub, 500);
+  }
 })();
 </script>
 </body>
