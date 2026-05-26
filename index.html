@@ -229,6 +229,9 @@ body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: v
 .subchapter-bar { height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
 .subchapter-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .15s; }
 .subchapter-header:hover .subchapter-actions { opacity: 1; }
+.sub-drag-handle { color: #CBD5E1; font-size: 13px; cursor: grab; flex-shrink: 0; }
+.subchapter-card.dragging { opacity: .4; }
+.subchapter-card.drag-over { box-shadow: 0 0 0 2px var(--accent); }
 
 /* ── Task List ── */
 .task-list { padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 4px; }
@@ -938,6 +941,7 @@ function renderChapters() {
     const subList = card.querySelector(`#sub-list-${chap.id}`);
     const subsToRender = hasFilter ? filteredSubs : chap.subs;
     subsToRender.forEach(sub => renderSubChapter(subList, chap.id, sub, hasFilter));
+    if (!hasFilter) initSubDragDrop(subList, chap.id);
   });
 
   if (!hasFilter) {
@@ -958,8 +962,11 @@ function renderSubChapter(container, chapId, sub, forceOpen) {
   const card = document.createElement('div');
   card.className = 'subchapter-card' + (isOpen ? ' open' : '');
   card.dataset.subId = sub.id;
+  card.dataset.chapId = chapId;
+  card.draggable = true;
   card.innerHTML = `
     <div class="subchapter-header" onclick="toggleSub('${chapId}','${sub.id}')">
+      <span class="sub-drag-handle" title="Drag to reorder" onclick="event.stopPropagation()">⠿</span>
       <span class="subchapter-toggle">▶</span>
       <span class="subchapter-name editable" ${dirAttr(sub.name)} ondblclick="startEdit(event,'sub','${sub.id}')">${escHTML(sub.name)}</span>
       <input class="inline-input" id="edit-sub-${sub.id}" onblur="saveEdit('sub','${sub.id}')" onkeydown="editKeydown(event,'sub','${sub.id}')">
@@ -1400,6 +1407,53 @@ function initDragDrop(taskList, chapId, subId) {
     sub.tasks.splice(tgtIdx, 0, moved);
 
     logActivity(`Task "${moved.title}" reordered`);
+    saveState();
+    render();
+  });
+}
+
+function initSubDragDrop(subList, chapId) {
+  let dragSrc = null;
+
+  subList.addEventListener('dragstart', e => {
+    const card = e.target.closest('.subchapter-card');
+    if (!card) return;
+    dragSrc = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', card.dataset.subId);
+  });
+
+  subList.addEventListener('dragend', () => {
+    if (dragSrc) dragSrc.classList.remove('dragging');
+    subList.querySelectorAll('.subchapter-card').forEach(c => c.classList.remove('drag-over'));
+    dragSrc = null;
+  });
+
+  subList.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const card = e.target.closest('.subchapter-card');
+    subList.querySelectorAll('.subchapter-card').forEach(c => c.classList.remove('drag-over'));
+    if (card && card !== dragSrc) card.classList.add('drag-over');
+  });
+
+  subList.addEventListener('drop', e => {
+    e.preventDefault();
+    const card = e.target.closest('.subchapter-card');
+    if (!card || card === dragSrc || !dragSrc) return;
+
+    const chap = state.chapters.find(c => c.id === chapId);
+    if (!chap) return;
+
+    const srcIdx = chap.subs.findIndex(s => s.id === dragSrc.dataset.subId);
+    const tgtIdx = chap.subs.findIndex(s => s.id === card.dataset.subId);
+    if (srcIdx === -1 || tgtIdx === -1) return;
+
+    const [moved] = chap.subs.splice(srcIdx, 1);
+    chap.subs.splice(tgtIdx, 0, moved);
+
+    logActivity(`Sub-chapter "${moved.name}" reordered`);
     saveState();
     render();
   });
