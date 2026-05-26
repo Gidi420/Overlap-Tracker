@@ -996,6 +996,13 @@ function renderSubChapter(container, chapId, sub, forceOpen) {
 function statusSelectClass(s) {
   return { 'Not Started':'s-not-started','In Progress':'s-in-progress','Review':'s-review','Done':'s-done' }[s] || '';
 }
+const STATUS_COLORS = {
+  'Not Started': 'background:#F1F5F9;color:#475569',
+  'In Progress': 'background:#FFF7ED;color:#C2410C',
+  'Review':      'background:#FEF3C7;color:#B45309',
+  'Done':        'background:#DCFCE7;color:#15803D',
+};
+function statusSelectStyle(s) { return STATUS_COLORS[s] || ''; }
 
 function renderTask(container, chapId, subId, task) {
   const overdue = isOverdue(task);
@@ -1019,8 +1026,8 @@ function renderTask(container, chapId, subId, task) {
       onchange="updateTask('${chapId}','${subId}','${task.id}','assignee',this.value)">
     <input class="task-inline-field date-field${overdue?' overdue':''}" type="date" value="${escHTML(task.due||'')}"
       onchange="updateTask('${chapId}','${subId}','${task.id}','due',this.value)">
-    <select class="task-inline-select ${statusSelectClass(task.status)}"
-      onchange="updateTask('${chapId}','${subId}','${task.id}','status',this.value);this.className='task-inline-select '+statusSelectClass(this.value)">
+    <select class="task-inline-select ${statusSelectClass(task.status)}" style="${statusSelectStyle(task.status)}"
+      onchange="updateTask('${chapId}','${subId}','${task.id}','status',this.value);this.className='task-inline-select '+statusSelectClass(this.value);this.style.cssText=statusSelectStyle(this.value)">
       ${['Not Started','In Progress','Review','Done'].map(s=>`<option ${task.status===s?'selected':''}>${s}</option>`).join('')}
     </select>
     <select class="task-inline-select"
