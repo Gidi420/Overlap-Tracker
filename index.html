@@ -1540,41 +1540,65 @@ function setSyncStatus(st, label) {
   document.getElementById('sync-label').textContent = label;
 }
 
-// Track the last timestamp GitHub had, so boot can detect if local is ahead
+// Track last ETag and last GitHub timestamp so boot can detect if local is ahead
+let _lastETag = null;
 let _lastGHTimestamp = null;
 
-// ── READ: use raw URL + cache-bust timestamp (no token needed, public repo) ──
+// ── READ ──
+// With token  → GitHub Contents API (always fresh, 5 000 req/hr, ETag-efficient)
+// Without token → raw URL + cache-bust (CDN cached but works without auth)
 async function syncFromGitHub() {
+  const token = getToken();
+
+  if (token) {
+    try {
+      const headers = { 'Accept': 'application/vnd.github+json', 'Authorization': 'Bearer ' + token };
+      if (_lastETag) headers['If-None-Match'] = _lastETag;
+      const resp = await fetch(GH_API, { headers, cache: 'no-store' });
+      if (resp.status === 304) { setSyncStatus('synced', 'Synced ✓'); return true; }
+      if (resp.ok) {
+        _lastETag = resp.headers.get('ETag') || null;
+        const file = await resp.json();
+        const raw  = atob(file.content.replace(/\n/g, ''));
+        const data = JSON.parse(decodeURIComponent(escape(raw)));
+        _lastGHTimestamp = data?.state?.updated || null;
+        return applyRemote(data, true);
+      }
+    } catch(e) { console.error('API sync error:', e); }
+  }
+
+  // Fallback: raw URL (no token / API failed)
   try {
-    const url  = GH_RAW + '?v=' + Date.now();
-    const resp = await fetch(url, { cache: 'no-store' });
+    const resp = await fetch(GH_RAW + '?v=' + Date.now(), { cache: 'no-store' });
     if (!resp.ok) { setSyncStatus('error', 'Fetch failed ' + resp.status); return false; }
     const data = await resp.json();
-    if (data && data.state && data.state.chapters) {
-      _lastGHTimestamp = data.state.updated || null;
-      const localTs = state && state.updated ? new Date(state.updated).getTime() : 0;
-      const ghTs    = _lastGHTimestamp       ? new Date(_lastGHTimestamp).getTime() : 0;
-      if (ghTs > localTs) {
-        state    = data.state;
-        activity = data.activity || [];
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity));
-        render();
-      }
-      const tok = getToken();
-      setSyncStatus(tok ? 'synced' : 'notoken', tok ? 'Synced ✓' : 'Read-only');
-      return true;
-    }
-    setSyncStatus('error', 'Bad data');
-    return false;
+    _lastGHTimestamp = data?.state?.updated || null;
+    return applyRemote(data, false);
   } catch(e) {
     setSyncStatus('error', 'Offline?');
-    console.error('Sync read error:', e);
     return false;
   }
 }
 
-// ── WRITE: use Contents API (needs token + SHA) ──
+function applyRemote(data, hasToken) {
+  if (data && data.state && data.state.chapters) {
+    const localTs = state && state.updated ? new Date(state.updated).getTime() : 0;
+    const ghTs    = _lastGHTimestamp       ? new Date(_lastGHTimestamp).getTime() : 0;
+    if (ghTs > localTs) {
+      state    = data.state;
+      activity = data.activity || [];
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      localStorage.setItem(ACTIVITY_KEY, JSON.stringify(activity));
+      render();
+    }
+    setSyncStatus(hasToken ? 'synced' : 'notoken', hasToken ? 'Synced ✓' : 'Read-only');
+    return true;
+  }
+  setSyncStatus('error', 'Bad data');
+  return false;
+}
+
+// ── WRITE: Contents API (needs token + SHA) ──
 async function pushToGitHub() {
   const token = getToken();
   if (!token) { setSyncStatus('notoken', 'No token'); return; }
@@ -1596,8 +1620,7 @@ async function pushToGitHub() {
 
     const putResp = await fetch(GH_API, { method: 'PUT', headers, body: JSON.stringify(body) });
     if (putResp.ok) {
-      // Wait for CDN to propagate the new file before reading back
-      await new Promise(r => setTimeout(r, 1800));
+      _lastETag = null; // force fresh read after write
       await syncFromGitHub();
     } else {
       const err = await putResp.json().catch(() => ({}));
